@@ -1,5 +1,6 @@
 import java.io.FileInputStream;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.PriorityQueue;
@@ -12,22 +13,62 @@ class simulador{
     static int M;
     static double numero_previo;
     static double seed;
-    static int tempo_chegada_minimo;
-    static int tempo_chegada_maximo;
-    static int tempo_servico_minimo;            
-    static int tempo_servico_maximo;
-    
-    // configuracao do simulador
     static int qtd_numeros_aleatorios;
-    static int capacidade_fila;
-    static int num_servidores;
 
     // controle do simulador
     static double tempo_global = 0.0;
-    static double [] tempos_dos_estados;
-    static int perda_de_clientes = 0;
-    static int tamanho_fila_atual = 0;
     static int numeros_aleatorios_usados = 0;
+    static Fila primeira_fila; // linked list
+
+    class Fila{
+        int Server;
+        int Capacity;
+        double MinArrival;
+        double MaxArrival;
+        double MinService;
+        double MaxService;
+        int Customers;
+        int Loss;
+        double[] Times;
+        Fila NextQ;    // prox fila conectada se tiver
+
+        public Fila(int Server, int Capacity, double MinArrival, double MaxArrival,
+                    double MinService, double MaxService, Fila NextQ){
+            this.Server = Server;
+            this.Capacity = Capacity;
+            this.MinArrival = MinArrival;
+            this.MaxArrival = MaxArrival;
+            this.MinService = MinService;
+            this.MaxService = MaxService;
+            this.NextQ = NextQ;
+            Times = new double[Capacity+1];
+            Customers = 0;
+            Loss = 0;
+        }
+
+        void Chegada(){
+            if (Customers < Capacity){
+                Customers++;
+                if (Customers <= Capacity){
+                    if (NextQ != null) // talvez nao funcione
+                        eventos.add(new Evento('P', this));
+                    else
+                        eventos.add(new Evento('S', this));
+                }
+            }
+            else{
+                Loss++;
+            }
+            eventos.add(new Evento('C', this));
+        }
+
+        void Saida(){
+            Customers--;
+            if (Customers >= Capacity){
+                eventos.add(new Evento('S',this));
+            }
+        }
+    }
 
     static PriorityQueue<Evento> eventos = new PriorityQueue<>(
         (Evento e1, Evento e2) -> Double.compare(e1.tempo, e2.tempo));
@@ -35,17 +76,26 @@ class simulador{
     static class Evento{
         char tipo;
         double tempo;
-        public Evento(char tipo){
+        Fila fila;
+        public Evento(char tipo, Fila fila_param){
             this.tipo = tipo;
-            if (tipo == 'C')
-                this.tempo = tempo_global + (((tempo_chegada_maximo - tempo_chegada_minimo) * nextRandom()) + tempo_chegada_minimo);
-            else
-                this.tempo = tempo_global + (((tempo_servico_maximo - tempo_servico_minimo) * nextRandom()) + tempo_servico_minimo);
+            if (tipo == 'C'){
+                this.tempo = tempo_global + (((fila_param.MaxArrival - fila_param.MinArrival) * nextRandom()) + fila_param.MinArrival);
+                this.fila = fila_param;
+            }
+            else{
+                this.tempo = tempo_global + (((fila_param.MaxService - fila_param.MinService) * nextRandom()) + fila_param.MinService);
+                if (tipo == 'P')
+                    this.fila = fila_param.NextQ;      
+                else
+                    this.fila = fila_param;
+                }
         }
         // Overload para o caso de ser o primeiro evento do simulador
-        public Evento(char tipo, double tempo){
+        public Evento(char tipo, double tempo, Fila fila){
             this.tipo = tipo;
             this.tempo = tempo;
+            this.fila = fila;
         }
     }
 
@@ -53,26 +103,6 @@ class simulador{
         numero_previo = (a * numero_previo + c) % M;
         numeros_aleatorios_usados++;
         return numero_previo / M;
-    }
-
-    static void chegada(Evento e){
-        if (tamanho_fila_atual < capacidade_fila){
-            tamanho_fila_atual++;
-            if (tamanho_fila_atual <= num_servidores){
-                eventos.add(new Evento('S'));
-            }
-        }
-        else{
-            perda_de_clientes++;
-        }
-        eventos.add(new Evento('C'));
-    }
-
-    static void saida(Evento e){
-        tamanho_fila_atual--;
-        if (tamanho_fila_atual >= num_servidores){
-            eventos.add(new Evento('S'));
-        }
     }
 
     static void loadYamlConfig(String nome_arquivo){
@@ -83,23 +113,28 @@ class simulador{
                 
             while (scanner.hasNextLine()) {
                 String line = scanner.nextLine();
+                if (line.isEmpty() || line.startsWith("#")){
+                    continue;
+                }
                 String[] parts = line.split(":");
-                if (parts.length == 2) {
-                    config.put(parts[0].trim(), parts[1].trim());
+                String key = parts[0].trim();
+                String value = parts[0].trim();
+
+                if (key.equals("a"))
+                    a = Integer.parseInt(value);
+                else if (key.equals("c"))
+                    c = Integer.parseInt(value);
+                else if (key.equals("M"))
+                    M = Integer.parseInt(value);
+                else if (key.equals("seed"))
+                    seed = Integer.parseInt(value);
+                else if (key.equals("qtd_numeros_aleatorios"))
+                    qtd_numeros_aleatorios = Integer.parseInt(value);
+                
+                if (line.startsWith("tempo_chegada_minimo")){
+                    int tempo_chegada_minimo = Integer.parseInt(value);
                 }
             }
-            a = Integer.parseInt(config.get("a"));
-            c = Integer.parseInt(config.get("c"));
-            M = Integer.parseInt(config.get("M"));
-            tempo_chegada_minimo = Integer.parseInt(config.get("tempo_chegada_minimo"));
-            tempo_chegada_maximo = Integer.parseInt(config.get("tempo_chegada_maximo"));
-            tempo_servico_minimo = Integer.parseInt(config.get("tempo_servico_minimo"));
-            tempo_servico_maximo = Integer.parseInt(config.get("tempo_servico_maximo"));
-            seed = Double.parseDouble(config.get("seed"));
-            qtd_numeros_aleatorios = Integer.parseInt(config.get("qtd_numeros_aleatorios"));
-            capacidade_fila = Integer.parseInt(config.get("capacidade_fila"));
-            tempos_dos_estados = new double[capacidade_fila+1];
-            num_servidores = Integer.parseInt(config.get("num_servidores"));
         } catch (Exception e) {
             e.printStackTrace();
         } finally {

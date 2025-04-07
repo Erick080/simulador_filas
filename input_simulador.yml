@@ -1,11 +1,29 @@
+# Parâmetros globais
 a: 123
 c: 322
 M: 100000
+seed: 3452.0
+qtd_numeros_aleatorios: 100000
+
+numero_de_filas: 3
+
 tempo_chegada_minimo: 2
 tempo_chegada_maximo: 5
 tempo_servico_minimo: 3
 tempo_servico_maximo: 5
-seed: 3452.0
-qtd_numeros_aleatorios: 100000
 capacidade_fila: 5
-num_servidores: 1
+num_servidores: 2
+
+tempo_chegada_minimo: 1
+tempo_chegada_maximo: 4
+tempo_servico_minimo: 2
+tempo_servico_maximo: 6
+capacidade_fila: 7
+num_servidores: 3
+
+tempo_chegada_minimo: 3
+tempo_chegada_maximo: 6
+tempo_servico_minimo: 4
+tempo_servico_maximo: 7
+capacidade_fila: 6
+num_servidores: 4
