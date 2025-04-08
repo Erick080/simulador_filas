@@ -1,8 +1,5 @@
 import java.io.FileInputStream;
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Scanner;
 
@@ -47,12 +44,12 @@ class simulador {
         }
 
         void Chegada(Evento e) {
+            Times[Customers] += e.tempo - tempo_global;
+            tempo_global = e.tempo;
             if (Customers < Capacity) {
-                Times[Customers] += e.tempo - tempo_global;
-                tempo_global = e.tempo;
                 Customers++;
                 if (Customers <= Server) {
-                    if (NextQ != null) // talvez nao funcione
+                    if (NextQ != null) 
                         eventos.add(new Evento('P', this));
                     else
                         eventos.add(new Evento('S', this));
@@ -60,13 +57,13 @@ class simulador {
             } else {
                 Loss++;
             }
-            eventos.add(new Evento('C', this));
+            if (e.tipo == 'C') // se for passagem nao deve criar evento de chegada
+                eventos.add(new Evento('C', this));
         }
 
         void Passagem(Evento e){
             // primeiro atualiza o tempo da fila atual
             Times[Customers] += e.tempo - tempo_global;
-            tempo_global = e.tempo;
             Customers--;
             // computa a passagem do cliente para a proxima fila
             e.fila = e.fila_passagem;
@@ -151,6 +148,13 @@ class simulador {
         }
     }
 
+    static String getValueYml(Scanner s){
+        String line = s.nextLine();
+        String [] parts = line.split(":");
+        String value = parts[1].trim();
+        return value;
+    }
+
     static void loadYamlConfig(String nome_arquivo) {
         Scanner scanner = null;
         try (InputStream inputStream = new FileInputStream(nome_arquivo)) {
@@ -163,7 +167,7 @@ class simulador {
                 }
                 String[] parts = line.split(":");
                 String key = parts[0].trim();
-                String value = parts[0].trim();
+                String value = parts[1].trim();
 
                 if (key.equals("a"))
                     a = Integer.parseInt(value);
@@ -172,22 +176,22 @@ class simulador {
                 else if (key.equals("M"))
                     M = Integer.parseInt(value);
                 else if (key.equals("seed"))
-                    seed = Integer.parseInt(value);
+                    seed = Double.parseDouble(value);
                 else if (key.equals("qtd_numeros_aleatorios"))
                     qtd_numeros_aleatorios = Integer.parseInt(value);
 
                 if (line.startsWith("tempo_chegada_minimo")) {
-                    int tempo_chegada_minimo = Integer.parseInt(value);
-                    scanner.nextLine();
-                    int tempo_chegada_maximo = Integer.parseInt(value);
-                    scanner.nextLine();
-                    int tempo_servico_minimo = Integer.parseInt(value);
-                    scanner.nextLine();
-                    int tempo_servico_maximo = Integer.parseInt(value);
-                    scanner.nextLine();
-                    int capacidade_fila = Integer.parseInt(value);
-                    scanner.nextLine();
+                    double tempo_chegada_minimo = Double.parseDouble(value);
+                    value = getValueYml(scanner);
+                    double tempo_chegada_maximo = Double.parseDouble(value);
+                    value = getValueYml(scanner);
+                    double tempo_servico_minimo = Double.parseDouble(value);
+                    value = getValueYml(scanner);
+                    double tempo_servico_maximo = Double.parseDouble(value);
+                    value = getValueYml(scanner);
                     int num_servidores = Integer.parseInt(value);
+                    value = getValueYml(scanner);
+                    int capacidade_fila = Integer.parseInt(value);
                     Fila fila = new Fila(num_servidores, capacidade_fila, tempo_chegada_minimo, tempo_chegada_maximo,
                             tempo_servico_minimo, tempo_servico_maximo, null);
                     if (primeira_fila == null) {
@@ -199,6 +203,7 @@ class simulador {
             }
         } catch (Exception e) {
             e.printStackTrace();
+            System.out.println(e);
         } finally {
             if (scanner != null) {
                 scanner.close();
@@ -209,7 +214,7 @@ class simulador {
     public static void main(String[] args) {
         loadYamlConfig("input_simulador.yml");
         numero_previo = seed;
-       // eventos.add(new Evento('C', 2.000));
+        eventos.add(new Evento('C', 2.000, primeira_fila));
 
         while (numeros_aleatorios_usados < qtd_numeros_aleatorios) {
             Evento e = eventos.poll();
@@ -225,8 +230,9 @@ class simulador {
         int i = 1;
         while (primeira_fila != null) {
             System.out.println("Fila " + i + ":");
-            primeira_fila.toString();
+            System.out.println(primeira_fila.toString());
             primeira_fila = primeira_fila.NextQ;
+            i++;
         }
         
     }

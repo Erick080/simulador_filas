@@ -5,23 +5,18 @@ M: 100000
 seed: 3452.0
 qtd_numeros_aleatorios: 100000
 
-tempo_chegada_minimo: 2
-tempo_chegada_maximo: 5
+tempo_chegada_minimo: 1
+tempo_chegada_maximo: 4
 tempo_servico_minimo: 3
-tempo_servico_maximo: 5
-capacidade_fila: 5
+tempo_servico_maximo: 4
 num_servidores: 2
+capacidade_fila: 3
 
 tempo_chegada_minimo: 1
 tempo_chegada_maximo: 4
 tempo_servico_minimo: 2
-tempo_servico_maximo: 6
-capacidade_fila: 7
-num_servidores: 3
+tempo_servico_maximo: 3
+num_servidores: 1
+capacidade_fila: 5
 
-tempo_chegada_minimo: 3
-tempo_chegada_maximo: 6
-tempo_servico_minimo: 4
-tempo_servico_maximo: 7
-capacidade_fila: 6
-num_servidores: 4
+
