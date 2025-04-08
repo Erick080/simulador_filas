@@ -27,7 +27,8 @@ class simulador {
         int Customers;
         int Loss;
         double[] Times;
-        Fila NextQ; // prox fila conectada se tiver
+        Fila NextQ; // prox fila conectada se tiver (TODO: Mudar para lista de filas com probs)
+        double Timestamp;
 
         public Fila(int Server, int Capacity, double MinArrival, double MaxArrival,
                 double MinService, double MaxService, Fila NextQ) {
@@ -38,13 +39,15 @@ class simulador {
             this.MinService = MinService;
             this.MaxService = MaxService;
             this.NextQ = NextQ;
-            Times = new double[Capacity + 1];
-            Customers = 0;
-            Loss = 0;
+            this.Times = new double[Capacity + 1];
+            this.Customers = 0;
+            this.Loss = 0;
+            this.Timestamp = 0.0;
         }
 
         void Chegada(Evento e) {
-            Times[Customers] += e.tempo - tempo_global;
+            Times[Customers] += e.tempo - Timestamp;
+            Timestamp = e.tempo;
             tempo_global = e.tempo;
             if (Customers < Capacity) {
                 Customers++;
@@ -62,16 +65,16 @@ class simulador {
         }
 
         void Passagem(Evento e){
-            // primeiro atualiza o tempo da fila atual
-            Times[Customers] += e.tempo - tempo_global;
-            Customers--;
+            // computa a saida da fila atual
+            Saida(e);
             // computa a passagem do cliente para a proxima fila
-            e.fila = e.fila_passagem;
+            e.fila = e.fila_passagem; //TODO: Calcular prox fila aqui
             e.fila_passagem.Chegada(e);
         }
 
         void Saida(Evento e) {
-            Times[Customers] += e.tempo - tempo_global;
+            Times[Customers] += e.tempo - Timestamp;
+            Timestamp = e.tempo;
             tempo_global = e.tempo;
             Customers--;
             if (Customers >= Server) {
@@ -84,19 +87,20 @@ class simulador {
         }
 
         @Override
-        public String toString(){
+        public String toString() {
             StringBuilder sb = new StringBuilder();
             sb.append("Perda de clientes:")
               .append(Loss)
               .append("\n");
+
             for (int i = 0; i < Times.length; i++) {
-                sb.append("Estado ")
-                  .append(i)
-                  .append(": tempo = ")
-                  .append(Times[i])
-                  .append("\t probabilidade = ")
-                  .append((Times[i] / tempo_global) * 100)
-                  .append("%\n");
+            sb.append("Estado ")
+              .append(i)
+              .append(": tempo = ")
+              .append(Times[i])
+              .append("\t probabilidade = ")
+              .append((Times[i] / tempo_global) * 100)
+              .append("%\n");
             }
             return sb.toString();
         }
@@ -119,7 +123,7 @@ class simulador {
             } else {
                 this.tempo = tempo_global
                         + (((fila_param.MaxService - fila_param.MinService) * nextRandom()) + fila_param.MinService);
-                if (tipo == 'P')
+                if (tipo == 'P') //TODO: Mudar isso
                     this.fila_passagem = fila_param.NextQ;
             }
         }
@@ -179,7 +183,10 @@ class simulador {
                     seed = Double.parseDouble(value);
                 else if (key.equals("qtd_numeros_aleatorios"))
                     qtd_numeros_aleatorios = Integer.parseInt(value);
+                
+                //TODO: leitura das probabilidades de transicao entre filas
 
+                //TODO: adicionar verificacao se fila tem tempo de chegada ou se eh conectada a outra fila
                 if (line.startsWith("tempo_chegada_minimo")) {
                     double tempo_chegada_minimo = Double.parseDouble(value);
                     value = getValueYml(scanner);
@@ -214,7 +221,7 @@ class simulador {
     public static void main(String[] args) {
         loadYamlConfig("input_simulador.yml");
         numero_previo = seed;
-        eventos.add(new Evento('C', 2.000, primeira_fila));
+        eventos.add(new Evento('C', 1.500, primeira_fila));
 
         while (numeros_aleatorios_usados < qtd_numeros_aleatorios) {
             Evento e = eventos.poll();
@@ -229,12 +236,12 @@ class simulador {
         System.out.printf("Tempo global da simulacao: %.4f\n", tempo_global);
         int i = 1;
         while (primeira_fila != null) {
+            primeira_fila.Times[primeira_fila.Customers] += tempo_global - primeira_fila.Timestamp;
             System.out.println("Fila " + i + ":");
             System.out.println(primeira_fila.toString());
             primeira_fila = primeira_fila.NextQ;
             i++;
         }
-        
     }
 }
 
