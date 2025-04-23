@@ -1,5 +1,8 @@
 import java.io.FileInputStream;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Scanner;
 
@@ -15,7 +18,25 @@ class simulador {
     // controle do simulador
     static double tempo_global = 0.0;
     static int numeros_aleatorios_usados = 0;
-    static Fila primeira_fila; // linked list
+    static ArrayList<Fila> filas;
+
+    static class FilaEProbabilidade{
+        Fila fila;
+        double probabilidade;
+        boolean saida;
+
+        public FilaEProbabilidade(Fila fila, double probabilidade) {
+            this.fila = fila;
+            this.probabilidade = probabilidade;
+            this.saida = false;
+        }
+
+        // pra indicar probabilidade de saida do sistema
+        public FilaEProbabilidade(boolean saida, double probabilidade) {
+            this.saida = saida;
+            this.probabilidade = probabilidade;
+        }
+    }
 
     static class Fila {
         int Server;
@@ -26,36 +47,40 @@ class simulador {
         double MaxService;
         int Customers;
         int Loss;
-        double[] Times;
-        Fila NextQ; // prox fila conectada se tiver (TODO: Mudar para lista de filas com probs)
+        //double[] Times;
+        Map<Integer, Double> Times;
+        PriorityQueue<FilaEProbabilidade> filas_conectadas;
         double Timestamp;
 
         public Fila(int Server, int Capacity, double MinArrival, double MaxArrival,
-                double MinService, double MaxService, Fila NextQ) {
+                double MinService, double MaxService) {
             this.Server = Server;
             this.Capacity = Capacity;
             this.MinArrival = MinArrival;
             this.MaxArrival = MaxArrival;
             this.MinService = MinService;
             this.MaxService = MaxService;
-            this.NextQ = NextQ;
-            this.Times = new double[Capacity + 1];
+            //this.Times = new double[Capacity + 1]; // nao vai funcionar para capacidade infinita
+            this.Times = new HashMap<>();
             this.Customers = 0;
             this.Loss = 0;
             this.Timestamp = 0.0;
+            filas_conectadas = new PriorityQueue<>(
+                    (FilaEProbabilidade f1, FilaEProbabilidade f2) -> Double.compare(f1.probabilidade, f2.probabilidade));
         }
 
         void Chegada(Evento e) {
-            Times[Customers] += e.tempo - Timestamp;
+            //Times[Customers] += e.tempo - Timestamp;
+            Times.put(Customers, Times.getOrDefault(Customers, 0.0) + (e.tempo - Timestamp));
             Timestamp = e.tempo;
             tempo_global = e.tempo;
             if (Customers < Capacity) {
                 Customers++;
                 if (Customers <= Server) {
-                    if (NextQ != null) 
+                    if (filas_conectadas.size() > 0) 
                         eventos.add(new Evento('P', this));
                     else
-                        eventos.add(new Evento('S', this));
+                        eventos.add(new Evento('S', this)); // se nao tiver nenhuma fila conectada, agenda saida diretamente
                 }
             } else {
                 Loss++;
@@ -67,18 +92,27 @@ class simulador {
         void Passagem(Evento e){
             // computa a saida da fila atual
             Saida(e);
-            // computa a passagem do cliente para a proxima fila
-            e.fila = e.fila_passagem; //TODO: Calcular prox fila aqui
-            e.fila_passagem.Chegada(e);
+            // computa a passagem do cliente para a proxima fila ou saida do sistema com base nas probabilidades
+            double probabilidade_passagem = nextRandom();
+            for(FilaEProbabilidade fila : filas_conectadas) {
+                if (probabilidade_passagem < fila.probabilidade) {
+                    if (!fila.saida){
+                        e.fila = fila.fila;
+                        e.fila.Chegada(e);                 
+                    }
+                    break;
+                }
+            }
         }
 
         void Saida(Evento e) {
-            Times[Customers] += e.tempo - Timestamp;
+            //Times[Customers] += e.tempo - Timestamp;
+            Times.put(Customers, Times.getOrDefault(Customers, 0.0) + (e.tempo - Timestamp));
             Timestamp = e.tempo;
             tempo_global = e.tempo;
             Customers--;
             if (Customers >= Server) {
-                if (NextQ != null) {
+                if (filas_conectadas.size() != 0) {
                     eventos.add(new Evento('P', this));
                 } else {
                     eventos.add(new Evento('S', this));
@@ -93,14 +127,25 @@ class simulador {
               .append(Loss)
               .append("\n");
 
-            for (int i = 0; i < Times.length; i++) {
-            sb.append("Estado ")
-              .append(i)
-              .append(": tempo = ")
-              .append(Times[i])
-              .append("\t probabilidade = ")
-              .append((Times[i] / tempo_global) * 100)
-              .append("%\n");
+            // for (int i = 0; i < Times.length; i++) {
+            // sb.append("Estado ")
+            //   .append(i)
+            //   .append(": tempo = ")
+            //   .append(Times[i])
+            //   .append("\t probabilidade = ")
+            //   .append((Times[i] / tempo_global) * 100)
+            //   .append("%\n");
+            // }
+            for (Map.Entry<Integer, Double> entry : Times.entrySet()) {
+                int estado = entry.getKey();
+                double tempo = entry.getValue();
+                sb.append("Estado ")
+                  .append(estado)
+                  .append(": tempo = ")
+                  .append(tempo)
+                  .append("\t probabilidade = ")
+                  .append((tempo / tempo_global) * 100)
+                  .append("%\n");
             }
             return sb.toString();
         }
@@ -112,7 +157,7 @@ class simulador {
     static class Evento {
         char tipo;
         double tempo;
-        Fila fila, fila_passagem;
+        Fila fila;
 
         public Evento(char tipo, Fila fila_param) {
             this.tipo = tipo;
@@ -123,8 +168,6 @@ class simulador {
             } else {
                 this.tempo = tempo_global
                         + (((fila_param.MaxService - fila_param.MinService) * nextRandom()) + fila_param.MinService);
-                if (tipo == 'P') //TODO: Mudar isso
-                    this.fila_passagem = fila_param.NextQ;
             }
         }
 
@@ -140,16 +183,6 @@ class simulador {
         numero_previo = (a * numero_previo + c) % M;
         numeros_aleatorios_usados++;
         return numero_previo / M;
-    }
-
-    static void add_fila(Fila fila_param) {
-        if (primeira_fila != null) {
-            Fila f = primeira_fila;
-            while (f.NextQ != null) {
-                f = f.NextQ;
-            }
-            f.NextQ = fila_param;
-        }
     }
 
     static String getValueYml(Scanner s){
@@ -171,8 +204,11 @@ class simulador {
                 }
                 String[] parts = line.split(":");
                 String key = parts[0].trim();
-                String value = parts[1].trim();
-
+                String value = "";
+                if (parts.length == 2) {
+                    value = parts[1].trim();
+                }
+                
                 if (key.equals("a"))
                     a = Integer.parseInt(value);
                 else if (key.equals("c"))
@@ -184,7 +220,6 @@ class simulador {
                 else if (key.equals("qtd_numeros_aleatorios"))
                     qtd_numeros_aleatorios = Integer.parseInt(value);
                 
-                //TODO: leitura das probabilidades de transicao entre filas
 
                 //TODO: adicionar verificacao se fila tem tempo de chegada ou se eh conectada a outra fila
                 if (line.startsWith("tempo_chegada_minimo")) {
@@ -198,13 +233,39 @@ class simulador {
                     value = getValueYml(scanner);
                     int num_servidores = Integer.parseInt(value);
                     value = getValueYml(scanner);
-                    int capacidade_fila = Integer.parseInt(value);
-                    Fila fila = new Fila(num_servidores, capacidade_fila, tempo_chegada_minimo, tempo_chegada_maximo,
-                            tempo_servico_minimo, tempo_servico_maximo, null);
-                    if (primeira_fila == null) {
-                        primeira_fila = fila;
+                    int capacidade_fila;
+                    if (value.equalsIgnoreCase("infinito") || value.equals("-1")) {
+                        capacidade_fila = Integer.MAX_VALUE;
                     } else {
-                        add_fila(fila);
+                        capacidade_fila = Integer.parseInt(value);
+                    }
+                    Fila fila = new Fila(num_servidores, capacidade_fila, tempo_chegada_minimo, tempo_chegada_maximo,
+                            tempo_servico_minimo, tempo_servico_maximo);
+                    
+                    filas.add(fila);
+                }
+
+                if (line.startsWith("transicoes")){
+                    while (scanner.hasNextLine()){
+                        line = scanner.nextLine().trim();
+                        if (line.isEmpty() || line.startsWith("#")) continue;
+
+                        if (line.startsWith("- origem:")) {
+                            int origem = Integer.parseInt(line.split(":")[1].trim()) - 1;
+
+                            line = scanner.nextLine().trim();
+                            String destinoStr = line.split(":")[1].trim();
+
+                            line = scanner.nextLine().trim();
+                            double prob = Double.parseDouble(line.split(":")[1].trim());
+
+                            if (destinoStr.equals("saida")) {
+                                filas.get(origem).filas_conectadas.add(new FilaEProbabilidade(true, prob));
+                            } else {
+                                int destino = Integer.parseInt(destinoStr) - 1;
+                                filas.get(origem).filas_conectadas.add(new FilaEProbabilidade(filas.get(destino), prob));
+                            }
+                        }
                     }
                 }
             }
@@ -219,9 +280,10 @@ class simulador {
     }
 
     public static void main(String[] args) {
+        filas = new ArrayList<>();
         loadYamlConfig("input_simulador.yml");
         numero_previo = seed;
-        eventos.add(new Evento('C', 1.500, primeira_fila));
+        eventos.add(new Evento('C', 1.500, filas.get(0))); // se a primeira fila do sistema n for declarada primeiro no yml isso n funciona
 
         while (numeros_aleatorios_usados < qtd_numeros_aleatorios) {
             Evento e = eventos.poll();
@@ -234,12 +296,13 @@ class simulador {
         }
 
         System.out.printf("Tempo global da simulacao: %.4f\n", tempo_global);
+        
         int i = 1;
-        while (primeira_fila != null) {
-            primeira_fila.Times[primeira_fila.Customers] += tempo_global - primeira_fila.Timestamp;
+        for (Fila fila : filas) {
+            //fila.Times[fila.Customers] += tempo_global - fila.Timestamp;
+            fila.Times.put(fila.Customers, fila.Times.getOrDefault(fila.Customers, 0.0) + (tempo_global - fila.Timestamp));
             System.out.println("Fila " + i + ":");
-            System.out.println(primeira_fila.toString());
-            primeira_fila = primeira_fila.NextQ;
+            System.out.println(fila.toString());
             i++;
         }
     }
