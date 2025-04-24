@@ -1,7 +1,9 @@
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Scanner;
@@ -49,7 +51,8 @@ class simulador {
         int Loss;
         //double[] Times;
         Map<Integer, Double> Times;
-        PriorityQueue<FilaEProbabilidade> filas_conectadas;
+        //PriorityQueue<FilaEProbabilidade> filas_conectadas;
+        List<FilaEProbabilidade> filas_conectadas;
         double Timestamp;
 
         public Fila(int Server, int Capacity, double MinArrival, double MaxArrival,
@@ -65,8 +68,7 @@ class simulador {
             this.Customers = 0;
             this.Loss = 0;
             this.Timestamp = 0.0;
-            filas_conectadas = new PriorityQueue<>(
-                    (FilaEProbabilidade f1, FilaEProbabilidade f2) -> Double.compare(f1.probabilidade, f2.probabilidade));
+            filas_conectadas = new ArrayList<>();
         }
 
         void Chegada(Evento e) {
@@ -94,14 +96,22 @@ class simulador {
             Saida(e);
             // computa a passagem do cliente para a proxima fila ou saida do sistema com base nas probabilidades
             double probabilidade_passagem = nextRandom();
+            double acumulada = 0;
             for(FilaEProbabilidade fila : filas_conectadas) {
-                if (probabilidade_passagem < fila.probabilidade) {
+                acumulada += fila.probabilidade;
+                if (probabilidade_passagem < acumulada) {
                     if (!fila.saida){
                         e.fila = fila.fila;
                         e.fila.Chegada(e);                 
                     }
-                    break;
+                    return;
                 }
+            }
+            // Garantia: se nenhuma transição foi feita (por p >= 1.0), força a última
+            FilaEProbabilidade ultima = filas_conectadas.get(filas_conectadas.size() - 1);
+            if (!ultima.saida) {
+                e.fila = ultima.fila;
+                e.fila.Chegada(e);
             }
         }
 
@@ -221,7 +231,6 @@ class simulador {
                     qtd_numeros_aleatorios = Integer.parseInt(value);
                 
 
-                //TODO: adicionar verificacao se fila tem tempo de chegada ou se eh conectada a outra fila
                 if (line.startsWith("tempo_chegada_minimo")) {
                     double tempo_chegada_minimo = Double.parseDouble(value);
                     value = getValueYml(scanner);
@@ -268,6 +277,9 @@ class simulador {
                         }
                     }
                 }
+                for (Fila fila : filas) {
+                    fila.filas_conectadas.sort(Comparator.comparingDouble(f -> f.probabilidade)); 
+                }              
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -283,7 +295,7 @@ class simulador {
         filas = new ArrayList<>();
         loadYamlConfig("input_simulador.yml");
         numero_previo = seed;
-        eventos.add(new Evento('C', 1.500, filas.get(0))); // se a primeira fila do sistema n for declarada primeiro no yml isso n funciona
+        eventos.add(new Evento('C', 2, filas.get(0))); // se a primeira fila do sistema n for declarada primeiro no yml isso n funciona
 
         while (numeros_aleatorios_usados < qtd_numeros_aleatorios) {
             Evento e = eventos.poll();
